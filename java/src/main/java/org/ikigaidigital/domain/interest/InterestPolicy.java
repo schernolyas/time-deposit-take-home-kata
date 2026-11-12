@@ -5,23 +5,14 @@ import org.ikigaidigital.TimeDeposit;
 /**
  * Strategy that calculates the interest a time deposit earns for one monthly balance update.
  * <p>
- * One implementation per plan type; new plans (or more complex rules for an existing plan) are added
- * as new implementations and registered in {@link InterestPolicies}, without touching the calculator.
+ * One implementation per plan type. The hierarchy is sealed: the set of plans is a closed product catalogue, so
+ * a new plan is an explicit decision - a new policy class, an entry in the {@code permits} clause and a registration
+ * in {@link InterestPolicies}. The calculator itself never changes.
  */
-public interface InterestPolicy {
+public sealed interface InterestPolicy permits AnnualRateInterestPolicy, NoInterestPolicy {
 
     /** Policy for plan types nobody has registered a rule for: such deposits earn nothing. */
-    InterestPolicy NO_INTEREST = new InterestPolicy() {
-        @Override
-        public String planType() {
-            return "<none>";
-        }
-
-        @Override
-        public double monthlyInterest(TimeDeposit deposit) {
-            return 0;
-        }
-    };
+    InterestPolicy NO_INTEREST = new NoInterestPolicy();
 
     /** The {@link TimeDeposit#getPlanType() plan type} this policy applies to. */
     String planType();

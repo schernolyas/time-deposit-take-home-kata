@@ -31,10 +31,12 @@ public class TimeDepositCalculator {
     }
 
     public void updateBalance(List<TimeDeposit> xs) {
-        for (TimeDeposit deposit : xs) {
-            double interest = interestPolicies.forPlanType(deposit.getPlanType()).monthlyInterest(deposit);
-            deposit.setBalance(deposit.getBalance() + roundToCents(interest));
-        }
+        xs.stream().forEach(this::applyMonthlyInterest);
+    }
+
+    private void applyMonthlyInterest(TimeDeposit deposit) {
+        double interest = interestPolicies.forPlanType(deposit.getPlanType()).monthlyInterest(deposit);
+        deposit.setBalance(deposit.getBalance() + roundToCents(interest));
     }
 
     /**

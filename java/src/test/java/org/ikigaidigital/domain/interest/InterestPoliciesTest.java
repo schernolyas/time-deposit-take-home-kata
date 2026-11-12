@@ -44,17 +44,21 @@ class InterestPoliciesTest {
     }
 
     @Test
-    void newPlanCanBeAddedWithoutChangingTheCalculator() {
-        // Example of extension: a hypothetical "corporate" plan with 2% p.a. and a 60-day grace period.
-        InterestPolicy corporate = new AnnualRateInterestPolicy("corporate", 0.02, 60) {
-        };
-        InterestPolicies policies = new InterestPolicies(List.of(new BasicPlanInterestPolicy(), corporate));
-        TimeDeposit young = new TimeDeposit(1, "corporate", 12_000.00, 60);
-        TimeDeposit old = new TimeDeposit(2, "corporate", 12_000.00, 61);
+    void calculatorAppliesOnlyThePoliciesOfTheGivenRegistry() {
+        InterestPolicies basicOnly = new InterestPolicies(List.of(new BasicPlanInterestPolicy()));
+        TimeDeposit basic = new TimeDeposit(1, "basic", 1_200.00, 31);
+        TimeDeposit student = new TimeDeposit(2, "student", 1_200.00, 31);
 
-        new TimeDepositCalculator(policies).updateBalance(List.of(young, old));
+        new TimeDepositCalculator(basicOnly).updateBalance(List.of(basic, student));
 
-        assertThat(young.getBalance()).isEqualTo(12_000.00);
-        assertThat(old.getBalance()).isEqualTo(12_020.00);
+        assertThat(basic.getBalance()).isEqualTo(1_201.00);
+        assertThat(student.getBalance()).isEqualTo(1_200.00);
+    }
+
+    @Test
+    void policyHierarchyIsClosed() {
+        assertThat(InterestPolicy.class.isSealed()).isTrue();
+        assertThat(AnnualRateInterestPolicy.class.getPermittedSubclasses()).containsExactlyInAnyOrder(
+                BasicPlanInterestPolicy.class, StudentPlanInterestPolicy.class, PremiumPlanInterestPolicy.class);
     }
 }

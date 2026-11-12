@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: time-deposit
+  datasource:
+    # Used when the app runs without Docker Compose support (e.g. against an existing PostgreSQL).
+    # With `mvn spring-boot:run` the connection details come from compose.yaml automatically.
+    url: jdbc:postgresql://localhost:5432/timedeposit
+    username: timedeposit
+    password: timedeposit
+  flyway:
+    locations: classpath:db/migration,classpath:db/sample-data
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; Hibernate only checks that the entities match it.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+        order_updates: true
+  docker:
+    compose:
+      file: compose.yaml
+      lifecycle-management: start-only
+
+time-deposit:
+  lock:
+    # Upper bound for one balance update; a lock left by a crashed pod expires after this time.
+    at-most-for: PT10M
+
+springdoc:
+  swagger-ui:
+    # Swagger UI renders the hand-written contract (the same file the code is generated from).
+    url: /openapi/time-deposit-api.yaml
+    path: /swagger-ui.html

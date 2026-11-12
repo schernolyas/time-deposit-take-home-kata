@@ -7,7 +7,8 @@ import org.ikigaidigital.TimeDeposit;
  * ({@code balance * annualRate / 12}), nothing during an initial grace period, and an optional
  * plan-specific eligibility rule on the deposit's age ({@link #accruesInterestOn(int)}).
  */
-public abstract class AnnualRateInterestPolicy implements InterestPolicy {
+public abstract sealed class AnnualRateInterestPolicy implements InterestPolicy
+        permits BasicPlanInterestPolicy, StudentPlanInterestPolicy, PremiumPlanInterestPolicy {
 
     /** "No interest is applied for the first 30 days for any existing plans." */
     public static final int DEFAULT_GRACE_PERIOD_DAYS = 30;

@@ -1,3 +1,5 @@
+> **Solution:** see [SOLUTION.md](SOLUTION.md).
+
 # Time Deposit Refactoring Kata - Take-Home Assignment
 
 ## XA Bank Time Deposit
