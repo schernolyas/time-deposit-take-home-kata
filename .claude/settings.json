@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(mvn:*)",
+      "Bash(./mvnw:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker compose:*)",
+      "Bash(curl -s http://localhost:8080/*)"
+    ],
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Edit(java/src/test/java/org/ikigaidigital/LegacyTimeDepositCalculator.java)",
+      "Write(java/src/test/java/org/ikigaidigital/LegacyTimeDepositCalculator.java)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *TimeDeposit*.java|*interest/*.java) mvn -q -f \"$CLAUDE_PROJECT_DIR/java/pom.xml\" test -Dtest='TimeDepositCalculator*Test' -Dsurefire.failIfNoSpecifiedTests=false || { echo 'Characterization tests FAILED: behaviour of updateBalance changed' >&2; exit 2; } ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
