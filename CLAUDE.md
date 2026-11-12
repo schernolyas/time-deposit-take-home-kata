@@ -54,11 +54,14 @@ XA Bank time-deposit take-home kata. The solution lives in `java/`
    One logical change per commit; the build must pass at every commit.
 3. **Contract first** for API changes: edit the OpenAPI YAML, regenerate
    (`mvn generate-sources`), then implement.
-4. **Assumptions** about ambiguous requirements go into a code comment
+4. **Coverage is a guide, not a target.** `mvn verify` writes a JaCoCo report (`java/target/site/jacoco`).
+   Use it to find untested behaviour, never write a test just to raise the number: every test must have a
+   clear purpose and be able to catch a real defect. A high percentage doesn't mean the tests are good.
+5. **Assumptions** about ambiguous requirements go into a code comment
    starting with `ASSUMPTION:` at the place where the decision is made.
-5. Run `mvn -f java/pom.xml verify` before declaring a task done
+6. Run `mvn -f java/pom.xml verify` before declaring a task done
    (needs Docker for Testcontainers). If you cannot run it, say so explicitly.
-6. Do not handle invalid input / exceptions beyond what is needed — the kata
+7. Do not handle invalid input / exceptions beyond what is needed — the kata
    explicitly excludes it. Do not add speculative abstractions.
 
 ## Coding conventions

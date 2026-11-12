@@ -17,6 +17,17 @@ mvn test      # unit + characterization + web-slice + architecture tests (no Doc
 mvn verify    # additionally runs *IT integration tests against PostgreSQL in Testcontainers
 ```
 
+## Test coverage
+
+`mvn verify` produces a JaCoCo report for unit **and** Testcontainers integration tests together:
+`target/site/jacoco/index.html` (HTML) and `target/site/jacoco/jacoco.xml` (for CI tools).
+Code generated from the OpenAPI contract, MapStruct implementations, Lombok-generated members and the Spring Boot
+main class are excluded, so the numbers describe hand-written code only.
+
+Coverage is used as a guide only: no minimum percentage is enforced. A high percentage doesn't mean the tests are
+good - every test here has a clear purpose and should catch a real defect. The strongest guarantee for the interest
+logic is not coverage but the golden-master comparison with the original implementation.
+
 ## Run
 
 ```bash
