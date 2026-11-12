@@ -64,25 +64,59 @@ exactly the two operations above.
 
 Hexagonal (ports & adapters). Dependencies point inwards and are enforced by `ArchitectureTest` (ArchUnit).
 
+```mermaid
+flowchart TB
+    client(["HTTP client / Swagger UI"])
+
+    subgraph web["adapter.in.web"]
+        ctrl["TimeDepositController<br/>implements generated TimeDepositsApi"]
+        dto["TimeDepositDtoMapper<br/>MapStruct"]
+        advice["TimeDepositExceptionHandler<br/>409 problem+json"]
+    end
+
+    subgraph app["application"]
+        portIn{{"port.in<br/>GetAllTimeDepositsUseCase<br/>UpdateAllBalancesUseCase"}}
+        exclusive["ExclusiveUpdateAllBalances<br/>@Primary, distributed lock"]
+        update["UpdateAllBalancesService<br/>@Transactional"]
+        getAll["GetAllTimeDepositsService<br/>@Transactional(readOnly)"]
+        portOut{{"port.out<br/>TimeDepositRepository<br/>WithdrawalRepository<br/>DistributedLock"}}
+    end
+
+    subgraph domain["domain - no Spring"]
+        calc["TimeDepositCalculator"]
+        policies["InterestPolicy strategies<br/>InterestPolicies registry"]
+        model["TimeDeposit, Withdrawal, Money"]
+    end
+
+    subgraph persistence["adapter.out.persistence"]
+        jpa["*PersistenceAdapter<br/>JPA entities, Spring Data<br/>MapStruct mapper"]
+    end
+
+    subgraph lockAdapter["adapter.out.lock"]
+        shed["ShedLockDistributedLockAdapter"]
+    end
+
+    db[("PostgreSQL<br/>schema by Flyway")]
+
+    client --> ctrl
+    ctrl --> dto
+    ctrl --> portIn
+    portIn -.-> exclusive
+    portIn -.-> getAll
+    exclusive --> update
+    update --> calc
+    calc --> policies
+    exclusive --> portOut
+    update --> portOut
+    getAll --> portOut
+    portOut -. implemented by .-> jpa
+    portOut -. implemented by .-> shed
+    jpa --> db
+    shed --> db
 ```
-            ┌──────────────────────── adapter.in.web ────────────────────────┐
- HTTP ───▶  │ TimeDepositController implements TimeDepositsApi (generated)   │
-            └───────────────┬────────────────────────────────────────────────┘
-                            │ port.in: GetAllTimeDepositsUseCase, UpdateAllBalancesUseCase
-            ┌───────────────▼──────────── application ───────────────────────┐
-            │ GetAllTimeDepositsService, UpdateAllBalancesService            │
-            └───────┬───────────────────────────────────────┬────────────────┘
-                    │ uses                                  │ port.out: TimeDepositRepository,
-            ┌───────▼────── domain ─────────────────┐       │           WithdrawalRepository
-            │ TimeDeposit, TimeDepositCalculator    │       │
-            │ InterestPolicy (Strategy) + registry  │       │
-            │ Withdrawal                            │       │
-            └───────────────────────────────────────┘       │
-            ┌───────────────────────── adapter.out.persistence ──▼───────────┐
-            │ *PersistenceAdapter ─▶ Spring Data JPA (entities) ──▶ PostgreSQL (Flyway)
-            └────────────────────────────────────────────────────────────────┘
- application: @Service/@Transactional services; domain stays Spring-free and is registered by config.
-```
+
+Spring is used in the adapters and, as stereotypes and `@Transactional` only, in the application layer. The domain
+stays Spring-free; `config.DomainConfiguration` registers `TimeDepositCalculator` as a bean.
 
 ### Interest calculation
 
@@ -96,6 +130,46 @@ chain was replaced by the **Strategy** pattern:
 - `InterestPolicies` — registry; unknown plan types resolve to `InterestPolicy.NO_INTEREST`.
 - The hierarchy is **sealed** (`InterestPolicy` → `AnnualRateInterestPolicy`, `NoInterestPolicy`;
   `AnnualRateInterestPolicy` → the three plans): the plan catalogue is closed and every implementation is known.
+
+```mermaid
+classDiagram
+    direction TB
+    class InterestPolicy {
+        <<sealed interface>>
+        +planType() String
+        +monthlyInterest(TimeDeposit) double
+    }
+    class AnnualRateInterestPolicy {
+        <<abstract sealed>>
+        +monthlyInterest(TimeDeposit) double
+        #accruesInterestOn(int days) boolean
+    }
+    class NoInterestPolicy {
+        <<final>>
+    }
+    class BasicPlanInterestPolicy {
+        <<final>>
+    }
+    class StudentPlanInterestPolicy {
+        <<final>>
+    }
+    class PremiumPlanInterestPolicy {
+        <<final>>
+    }
+    class InterestPolicies {
+        +forPlanType(String) InterestPolicy
+    }
+    class TimeDepositCalculator {
+        +updateBalance(List~TimeDeposit~) void
+    }
+    InterestPolicy <|.. AnnualRateInterestPolicy
+    InterestPolicy <|.. NoInterestPolicy
+    AnnualRateInterestPolicy <|-- BasicPlanInterestPolicy
+    AnnualRateInterestPolicy <|-- StudentPlanInterestPolicy
+    AnnualRateInterestPolicy <|-- PremiumPlanInterestPolicy
+    InterestPolicies o-- InterestPolicy
+    TimeDepositCalculator --> InterestPolicies
+```
 
 A new plan is one new class, its name in the parent's `permits` clause and one line in
 `InterestPolicies.defaults()`; the calculator and the logic of existing policies do not change. Rules that need more
@@ -116,6 +190,38 @@ on different Kubernetes pods - can never both credit interest:
 - If a pod dies while holding the lock, the lock expires after `time-deposit.lock.at-most-for` (default 10 minutes);
   this value must exceed the longest expected balance update.
 - `TimeDepositApiIT` proves it against real PostgreSQL by inserting the lock row of "another pod".
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant W as TimeDepositController
+    participant X as ExclusiveUpdateAllBalances
+    participant L as ShedLock
+    participant S as UpdateAllBalancesService
+    participant R as TimeDepositPersistenceAdapter
+    participant DB as PostgreSQL
+
+    C->>W: POST /time-deposits/balance-updates
+    W->>X: updateAllBalances()
+    X->>L: lock "time-deposits:update-all-balances"
+    alt lock acquired
+        L-->>X: acquired
+        X->>S: updateAllBalances() via Spring proxy
+        Note over S,DB: transaction begins
+        S->>R: findAll()
+        R->>DB: SELECT time_deposits
+        S->>S: TimeDepositCalculator.updateBalance(deposits)
+        S->>R: updateBalances(deposits)
+        Note over S,DB: commit, Hibernate flushes batched UPDATEs
+        X->>L: unlock
+        W-->>C: 204 No Content
+    else held by another pod
+        L-->>X: not acquired
+        X-->>W: BalanceUpdateInProgressException
+        W-->>C: 409 Conflict, problem+json
+    end
+```
 
 The lock prevents *overlapping* calls only. Two calls one after the other still credit two months - the endpoint is
 deliberately not idempotent (see assumptions).
